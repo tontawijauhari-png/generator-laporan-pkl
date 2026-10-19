@@ -575,9 +575,7 @@ with st.form("form_pkl"):
             ]
         )
         total_minggu = 12 if "3 Bulan" in durasi_pilihan else 24
-        duras
-
-i_label = "3 Bulan" if total_minggu == 12 else "6 Bulan"
+        durasi_label = "3 Bulan" if total_minggu == 12 else "6 Bulan"
 
         kota = st.text_input("Kota / Kabupaten Sekolah", placeholder="contoh: Lombok Timur")
         curr_year = datetime.now().year
