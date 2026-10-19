@@ -1,3 +1,42 @@
+import time
+
+def call_gemini_with_fallback(client, prompt, schema):
+    """
+    Memanggil Gemini API dengan retry otomatis (backoff) dan model cadangan
+    untuk mengatasi error 503 (Server Busy) atau 429 (Rate Limit).
+    """
+    # Daftar model prioritas -> cadangan
+    candidate_models = ["gemini-3.8-flash", "gemini-3-flash", "gemini-2.0-flash"]
+    
+    last_exception = None
+    for model_name in candidate_models:
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,
+                        response_mime_type="application/json",
+                        response_schema=schema
+                    )
+                )
+                return response
+            except Exception as e:
+                err_msg = str(e)
+                last_exception = e
+                # Jika terkena 503 (server sibuk) atau 429 (kuota padat), tunggu sejenak lalu ulangi
+                if "503" in err_msg or "429" in err_msg or "UNAVAILABLE" in err_msg:
+                    sleep_time = (attempt + 1) * 3  # Jeda: 3 detik, 6 detik, 9 detik
+                    time.sleep(sleep_time)
+                    continue
+                else:
+                    # Jika error lain (misal 404 model not found), langsung lanjut ganti model
+                    break
+                    
+    # Jika seluruh percobaan model gagal
+    raise last_exception
 import io
 import json
 import re
@@ -655,15 +694,8 @@ if submitted:
                 Pastikan istilah teknis, alat, dan prosedur sangat relevan dengan bidang keahlian {jurusan}.
                 """
 
-                response = client.models.generate_content(
-                    model="gemini-3.8-flash",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=0.3,
-                        response_mime_type="application/json",
-                        response_schema=LaporanPKLOutput
-                    )
-                )
+                # GUNAKAN FUNGSI RESILIEN:
+                response = call_gemini_with_fallback(client, prompt, LaporanPKLOutput)
 
                 result_data = json.loads(response.text)
                 ai_kerangka = result_data.get("kerangka_laporan", "")
