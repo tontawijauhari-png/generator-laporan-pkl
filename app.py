@@ -2,13 +2,14 @@ import time
 
 def call_gemini_with_fallback(client, prompt, schema):
     """
-    Memanggil Gemini API dengan retry otomatis (backoff) dan model cadangan
-    untuk mengatasi error 503 (Server Busy) atau 429 (Rate Limit).
+    Memanggil Gemini API khusus model generasi 3.x aktif dengan retry otomatis
+    bila server Google sedang padat (503 / 429).
     """
-    # Daftar model prioritas -> cadangan
-    candidate_models = ["gemini-3.8-flash", "gemini-3-flash", "gemini-2.0-flash"]
+    # Gunakan hanya model generasi 3.x yang aktif
+    candidate_models = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3-flash"]
     
     last_exception = None
+
     for model_name in candidate_models:
         max_retries = 3
         for attempt in range(max_retries):
@@ -26,16 +27,20 @@ def call_gemini_with_fallback(client, prompt, schema):
             except Exception as e:
                 err_msg = str(e)
                 last_exception = e
-                # Jika terkena 503 (server sibuk) atau 429 (kuota padat), tunggu sejenak lalu ulangi
+                
+                # Jika model tidak ditemukan (404), langsung lewati ke model berikutnya
+                if "404" in err_msg or "NOT_FOUND" in err_msg:
+                    break
+                
+                # Jika server sibuk (503) atau rate limit (429), beri jeda lalu coba ulang
                 if "503" in err_msg or "429" in err_msg or "UNAVAILABLE" in err_msg:
-                    sleep_time = (attempt + 1) * 3  # Jeda: 3 detik, 6 detik, 9 detik
+                    sleep_time = (attempt + 1) * 3  # Jeda: 3s, 6s, 9s
                     time.sleep(sleep_time)
                     continue
                 else:
-                    # Jika error lain (misal 404 model not found), langsung lanjut ganti model
                     break
-                    
-    # Jika seluruh percobaan model gagal
+
+    # Jika semua model di daftar gagal
     raise last_exception
 import io
 import json
